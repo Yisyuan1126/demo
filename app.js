@@ -1,0 +1,535 @@
+/*
+ * VRAM & GPU cost calculator (FastGPU's Hugging Face Space).
+ *
+ * Runs entirely in the visitor's browser. Two public, keyless reads:
+ *   1. the Hugging Face Hub API, for the model's own metadata (parameter count from its safetensors or GGUF
+ *      header, its weight format, its task);
+ *   2. FastGPU's match API (https://fastgpu.co/api/v1/match), which sizes the job and ranks the GPU setups
+ *      that hold it at live prices. All sizing is FastGPU's, so this page and fastgpu.co never disagree.
+ * The model list in catalog.js only powers search and quick picks; every selection is re-read live.
+ */
+(function () {
+  "use strict";
+
+  const SITE = "https://fastgpu.co";
+  const API = SITE + "/api/v1/match";
+  const GPUS_API = SITE + "/api/v1/gpus";
+  const HUB = "https://huggingface.co";
+  const UTM = { utm_source: "huggingface", utm_medium: "space", utm_campaign: "gpu-cost-calculator" };
+  const DEFAULT_MODEL = "Qwen/Qwen3-32B";
+  const PICKS = window.FASTGPU_PICKS || [];
+  const CATALOG = (window.FASTGPU_CATALOG || []).map(function (r) {
+    return { id: r[0], p: r[1], task: r[2], dl: r[3], q: r[4], low: r[0].toLowerCase() };
+  });
+  const BY_ID = new Map(CATALOG.map(function (m) { return [m.low, m]; }));
+
+  const TASKS = {
+    inference: "Run / serve it",
+    "finetune-lora": "Fine-tune with LoRA",
+    "finetune-full": "Full fine-tune",
+    generate: "Generate images or video",
+    transcribe: "Transcribe speech",
+    embed: "Embed text",
+  };
+  const PIPELINE_TASK = {
+    "text-generation": "inference", "image-text-to-text": "inference", "any-to-any": "inference",
+    "text2text-generation": "inference", "visual-question-answering": "inference", "text-to-speech": "inference",
+    "text-to-image": "generate", "image-to-image": "generate", "text-to-video": "generate", "image-to-video": "generate",
+    "automatic-speech-recognition": "transcribe",
+    "feature-extraction": "embed", "sentence-similarity": "embed", "text-ranking": "embed",
+  };
+  const PRECISION_TEXT = { fp16: "16-bit", int8: "8-bit", int4: "4-bit" };
+  const BYTES = { fp16: 2, int8: 1, int4: 0.5 };
+
+  const $ = function (id) { return document.getElementById(id); };
+  const el = {
+    form: $("calc"), input: $("model"), list: $("suggestions"), picks: $("picks"),
+    task: $("task"), prec: $("precision"), region: $("region"), spot: $("spot"),
+    out: $("result"), status: $("status"),
+  };
+
+  const state = {
+    sel: null,        // { id, paramsB, paramsSource, bits, format, pipeline, gated } or { size: N }
+    result: null,     // last match API answer
+    sort: "price",
+    gpuMemory: null,  // { "H100 SXM": 80, ... } from FastGPU's GPU list
+    seq: 0,           // request counter, so a slow answer never overwrites a newer one
+    active: -1,       // highlighted suggestion
+    options: [],
+  };
+
+  // ---------------------------------------------------------------- helpers
+  function link(url) {
+    const u = new URL(url, SITE);
+    if (u.hostname.endsWith("fastgpu.co")) Object.keys(UTM).forEach(function (k) { u.searchParams.set(k, UTM[k]); });
+    return u.toString();
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  }
+  function usd(n) {
+    if (n == null || !isFinite(n)) return "n/a";
+    const digits = n < 100 ? 2 : 0;
+    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  function gb(n) {
+    if (n >= 100) return Math.round(n).toLocaleString("en-US");
+    if (n >= 1) return n.toFixed(1).replace(/\.0$/, "");
+    return n.toFixed(2).replace(/0$/, "");
+  }
+  // The parameter count as shown (32.76 -> 32.8), so every figure derived on screen uses the number on screen.
+  function shownParams(p) {
+    if (p >= 1000) return Math.round(p / 10) * 10;
+    if (p >= 10) return Math.round(p * 10) / 10;
+    return Math.round(p * 100) / 100;
+  }
+  function sizeText(p) {
+    const v = shownParams(p);
+    return v >= 1000 ? (v / 1000).toString() + "T" : v.toString() + "B";
+  }
+  function ago(iso) {
+    const t = Date.parse(iso);
+    if (!isFinite(t)) return null;
+    const min = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (min < 1) return "just now";
+    if (min < 60) return min + " min ago";
+    const h = Math.round(min / 60);
+    return h + (h === 1 ? " hour ago" : " hours ago");
+  }
+  function timeout(ms) {
+    const c = new AbortController();
+    setTimeout(function () { c.abort(); }, ms);
+    return c.signal;
+  }
+  async function getJson(url, ms) {
+    const r = await fetch(url, { signal: timeout(ms) });
+    if (!r.ok) {
+      const e = new Error("HTTP " + r.status);
+      e.status = r.status;
+      throw e;
+    }
+    return r.json();
+  }
+
+  // The total size a repo name states ("Qwen3-30B-A3B" -> 30), skipping the active ("A3B") and expert ("8x7B") forms.
+  function nameSizeB(id) {
+    const name = (id.split("/").pop() || "").replace(/_/g, "-");
+    const m = name.match(/(?<![\w.])(\d+(?:\.\d+)?)[Bb](?![a-zA-Z0-9])/);
+    return m ? parseFloat(m[1]) : null;
+  }
+
+  // Bits the published weights are stored at (4 or 8), from the repo's quantization config, its tensors, or its name.
+  function weightBits(meta, id) {
+    const qc = (meta.config && meta.config.quantization_config) || {};
+    const method = String(qc.quant_method || "").toLowerCase();
+    if (["awq", "gptq", "hqq", "aqlm", "quark"].indexOf(method) >= 0) return (qc.bits || qc.w_bit || qc.nbits) === 8 ? 8 : 4;
+    if (method === "bitsandbytes") return qc.load_in_4bit ? 4 : qc.load_in_8bit ? 8 : null;
+    if (method === "mxfp4" || method === "nvfp4") return 4;
+    if (["fp8", "fbgemm_fp8", "eetq"].indexOf(method) >= 0) return 8;
+    if (method === "compressed-tensors") {
+      const bits = Object.values(qc.config_groups || {}).map(function (g) { return g && g.weights && g.weights.num_bits; }).filter(Boolean);
+      if (bits.length) { const b = Math.min.apply(null, bits); if (b === 4 || b === 8) return b; }
+    }
+    const top = dominantDtype(meta);
+    if (top && top.indexOf("F8") === 0) return 8;
+    if (meta.gguf && !meta.safetensors) return 4;
+    const n = id.toLowerCase();
+    if (/(^|[-_./])(4bit|4-bit|int4|w4a16|awq|gptq|nf4|mxfp4|nvfp4|q4)/.test(n)) return 4;
+    if (/(^|[-_./])(8bit|8-bit|int8|w8a8|w8a16|fp8)/.test(n)) return 8;
+    return null;
+  }
+  function dominantDtype(meta) {
+    const p = meta.safetensors && meta.safetensors.parameters;
+    if (!p) return null;
+    let best = null;
+    Object.keys(p).forEach(function (k) { if (!best || p[k] > p[best]) best = k; });
+    return best;
+  }
+  function formatName(meta, bits) {
+    const qc = (meta.config && meta.config.quantization_config) || {};
+    const method = String(qc.quant_method || "").toUpperCase();
+    if (meta.gguf && !meta.safetensors) return "GGUF";
+    if (method && method !== "COMPRESSED-TENSORS" && method !== "BITSANDBYTES") return method + (bits ? " " + bits + "-bit" : "");
+    if (bits) return bits + "-bit";
+    const top = dominantDtype(meta);
+    return top || null;
+  }
+
+  // ---------------------------------------------------------------- model metadata
+  async function readModel(id) {
+    const path = id.split("/").map(encodeURIComponent).join("/");
+    const q = ["safetensors", "gguf", "config", "pipeline_tag", "library_name", "gated", "downloads", "likes"]
+      .map(function (k) { return "expand[]=" + k; }).join("&");
+    const meta = await getJson(HUB + "/api/models/" + path + "?" + q, 8000);
+    const total = ((meta.safetensors && meta.safetensors.total) || (meta.gguf && meta.gguf.total) || 0) / 1e9;
+    const stated = nameSizeB(meta.id || id);
+    let paramsB = null, source = null;
+    if (total && stated && total < 0.6 * stated) { paramsB = stated; source = "name"; }
+    else if (total) { paramsB = total; source = meta.safetensors && meta.safetensors.total ? "safetensors" : "gguf"; }
+    else if (stated) { paramsB = stated; source = "name"; }
+    const bits = weightBits(meta, meta.id || id);
+    return {
+      id: meta.id || id,
+      paramsB: paramsB,
+      paramsSource: source,
+      bits: bits,
+      format: formatName(meta, bits),
+      pipeline: meta.pipeline_tag || null,
+      library: meta.library_name || null,
+      gated: !!meta.gated,
+    };
+  }
+
+  // ---------------------------------------------------------------- search box
+  function sizeQuery(text) {
+    const m = text.trim().match(/^~?(\d+(?:\.\d+)?)\s*([bt])?(?:\s*(?:params?|parameters?))?$/i);
+    if (!m) return null;
+    const n = parseFloat(m[1]) * (m[2] && m[2].toLowerCase() === "t" ? 1000 : 1);
+    return n >= 0.05 && n <= 5000 ? n : null;
+  }
+  function suggest(text) {
+    const t = text.trim().toLowerCase();
+    const out = [];
+    if (!t) {
+      PICKS.forEach(function (id) { const m = BY_ID.get(id.toLowerCase()); if (m) out.push({ kind: "model", m: m }); });
+      return out.slice(0, 8);
+    }
+    const size = sizeQuery(t);
+    if (size) out.push({ kind: "size", size: size });
+    const words = t.split(/[\s/]+/).filter(Boolean);
+    const scored = [];
+    for (let i = 0; i < CATALOG.length; i++) {
+      const m = CATALOG[i];
+      if (!words.every(function (w) { return m.low.indexOf(w) >= 0; })) continue;
+      const name = m.low.split("/").pop();
+      const score = (m.low === t ? 4 : 0) + (name.indexOf(t) === 0 ? 2 : 0) + (m.low.indexOf(t) >= 0 ? 1 : 0);
+      scored.push({ m: m, score: score });
+    }
+    scored.sort(function (a, b) { return b.score - a.score || b.m.dl - a.m.dl; });
+    scored.slice(0, 8).forEach(function (s) { out.push({ kind: "model", m: s.m }); });
+    if (/^[\w.-]+\/[\w.-]+$/.test(text.trim()) && !BY_ID.has(t)) out.unshift({ kind: "hub", id: text.trim() });
+    return out.slice(0, 9);
+  }
+  function renderSuggestions() {
+    const opts = state.options;
+    if (!opts.length) { closeSuggestions(); return; }
+    el.list.innerHTML = opts.map(function (o, i) {
+      const sel = i === state.active ? ' aria-selected="true"' : "";
+      if (o.kind === "size") return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">A ' + esc(sizeText(o.size)) + "-parameter model</span><span class=\"opt-meta\">size only</span></li>";
+      if (o.kind === "hub") return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">' + esc(o.id) + '</span><span class="opt-meta">look it up on Hugging Face</span></li>';
+      return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">' + esc(o.m.id) + '</span><span class="opt-meta">' + esc(sizeText(o.m.p)) + " · " + esc(TASKS[o.m.task] || o.m.task) + "</span></li>";
+    }).join("");
+    el.list.hidden = false;
+    el.input.setAttribute("aria-expanded", "true");
+    el.input.setAttribute("aria-activedescendant", state.active >= 0 ? "opt-" + state.active : "");
+  }
+  function closeSuggestions() {
+    el.list.hidden = true;
+    el.input.setAttribute("aria-expanded", "false");
+    el.input.removeAttribute("aria-activedescendant");
+    state.active = -1;
+  }
+  function choose(o) {
+    closeSuggestions();
+    if (!o) return;
+    if (o.kind === "size") { el.input.value = sizeText(o.size) + " model"; selectSize(o.size); return; }
+    const id = o.kind === "hub" ? o.id : o.m.id;
+    el.input.value = id;
+    selectModel(id, true);
+  }
+
+  el.input.addEventListener("input", function () {
+    state.options = suggest(el.input.value);
+    state.active = state.options.length ? 0 : -1;
+    renderSuggestions();
+  });
+  el.input.addEventListener("focus", function () {
+    state.options = suggest(el.input.value === (state.sel && state.sel.id) ? "" : el.input.value);
+    state.active = -1;
+    renderSuggestions();
+  });
+  el.input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (el.list.hidden) { state.options = suggest(el.input.value); }
+      const n = state.options.length;
+      if (!n) return;
+      e.preventDefault();
+      state.active = e.key === "ArrowDown" ? (state.active + 1) % n : (state.active - 1 + n) % n;
+      renderSuggestions();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (!el.list.hidden && state.active >= 0) { choose(state.options[state.active]); return; }
+      const opts = suggest(el.input.value);
+      choose(opts[0]);
+    } else if (e.key === "Escape") {
+      closeSuggestions();
+    }
+  });
+  el.list.addEventListener("mousedown", function (e) {
+    const li = e.target.closest("li[data-i]");
+    if (!li) return;
+    e.preventDefault();
+    choose(state.options[Number(li.getAttribute("data-i"))]);
+  });
+  el.input.addEventListener("blur", function () { setTimeout(closeSuggestions, 120); });
+
+  el.picks.innerHTML = PICKS.filter(function (id) { return BY_ID.has(id.toLowerCase()); }).map(function (id) {
+    return '<button type="button" class="chip" data-id="' + esc(id) + '">' + esc(id.split("/").pop()) + "</button>";
+  }).join("");
+  el.picks.addEventListener("click", function (e) {
+    const b = e.target.closest("button[data-id]");
+    if (!b) return;
+    el.input.value = b.getAttribute("data-id");
+    selectModel(b.getAttribute("data-id"), true);
+  });
+
+  [el.task, el.prec, el.region, el.spot].forEach(function (c) {
+    c.addEventListener("change", function () { saveHash(); run(); });
+  });
+  el.form.addEventListener("submit", function (e) { e.preventDefault(); });
+
+  // ---------------------------------------------------------------- selection
+  async function selectModel(id, resetTask) {
+    const seq = ++state.seq;
+    const known = BY_ID.get(id.toLowerCase());
+    setStatus("Reading " + id + " from Hugging Face…");
+    let sel;
+    try {
+      sel = await readModel(id);
+    } catch (err) {
+      if (seq !== state.seq) return;
+      if (known) {
+        sel = { id: known.id, paramsB: known.p, paramsSource: "catalog", bits: known.q, format: known.q ? known.q + "-bit" : null, pipeline: null, gated: false };
+      } else {
+        showError(err && err.status === 404
+          ? "Hugging Face has no public model called " + esc(id) + ". Check the spelling, or type a size such as 70B."
+          : "Could not read " + esc(id) + " from Hugging Face just now. Try again, or type a size such as 70B.");
+        return;
+      }
+    }
+    if (seq !== state.seq) return;
+    state.sel = sel;
+    if (resetTask) {
+      const t = (sel.pipeline && PIPELINE_TASK[sel.pipeline]) || (known && known.task) || "inference";
+      el.task.value = t;
+      el.prec.value = "auto";
+    }
+    saveHash();
+    run();
+  }
+  function selectSize(size) {
+    state.sel = { size: size };
+    el.prec.value = el.prec.value || "auto";
+    saveHash();
+    run();
+  }
+
+  function autoPrecision() {
+    const s = state.sel;
+    if (!s || !s.bits) return undefined;
+    return s.bits === 4 ? "int4" : "int8";
+  }
+
+  // ---------------------------------------------------------------- match
+  async function run() {
+    const s = state.sel;
+    if (!s) return;
+    const seq = ++state.seq;
+    const params = new URLSearchParams();
+    if (s.id) params.set("model", s.id);
+    const paramsB = s.id ? s.paramsB : s.size;
+    if (paramsB) params.set("params_b", String(Math.round(paramsB * 100) / 100));
+    params.set("task", el.task.value);
+    const prec = el.prec.value === "auto" ? autoPrecision() : el.prec.value;
+    if (prec) params.set("precision", prec);
+    if (el.region.value) params.set("region", el.region.value);
+    if (el.spot.checked) params.set("spot", "true");
+    if (s.id && !paramsB) {
+      showError("The repo " + esc(s.id) + " does not publish a parameter count. Type its size instead, for example 70B.");
+      return;
+    }
+    setStatus("Pricing the GPUs that fit…");
+    let res = null;
+    try {
+      const both = await Promise.all([
+        fetch(API + "?" + params.toString(), { signal: timeout(15000) }).then(function (r) {
+          return r.json().catch(function () { return null; }).then(function (body) { return { ok: r.ok, body: body }; });
+        }),
+        loadGpuMemory(),
+      ]);
+      res = both[0];
+    } catch (err) {
+      res = null;
+    }
+    if (seq !== state.seq) return;
+    if (res && res.body && (res.ok || res.body.error)) {
+      state.result = res.body;
+      render();
+      return;
+    }
+    showError("FastGPU's price feed did not answer in time. <button type=\"button\" class=\"linklike\" id=\"retry\">Try again</button>");
+    const b = $("retry");
+    if (b) b.addEventListener("click", run);
+  }
+  async function loadGpuMemory() {
+    if (state.gpuMemory) return;
+    try {
+      const d = await getJson(GPUS_API, 10000);
+      const map = {};
+      (d.gpus || []).forEach(function (g) { if (g.gpu && g.vram_gb) map[g.gpu] = g.vram_gb; });
+      state.gpuMemory = map;
+    } catch (e) {
+      state.gpuMemory = {};
+    }
+  }
+
+  // ---------------------------------------------------------------- render
+  function setStatus(text) {
+    el.status.textContent = text;
+    el.out.setAttribute("aria-busy", "true");
+    el.out.classList.add("loading");
+  }
+  function showError(html) {
+    el.out.classList.remove("loading");
+    el.out.removeAttribute("aria-busy");
+    el.status.textContent = "";
+    el.out.innerHTML = '<div class="notice">' + html + "</div>";
+  }
+
+  function needSentence(task, precText) {
+    switch (task) {
+      case "finetune-lora": return "of GPU memory to fine-tune it with LoRA at " + precText;
+      case "finetune-full": return "of GPU memory for a full fine-tune";
+      case "generate": return "of GPU memory to generate with it at " + precText;
+      case "transcribe": return "of GPU memory to transcribe with it at " + precText;
+      case "embed": return "of GPU memory to embed with it at " + precText;
+      default: return "of GPU memory to run it at " + precText;
+    }
+  }
+  function derivation(task, rawParamsB, precision, need) {
+    const bytes = BYTES[precision];
+    const paramsB = shownParams(rawParamsB);
+    const weights = paramsB * bytes;
+    const w = "Weights: " + sizeText(paramsB) + " parameters × " + bytes + (bytes === 1 ? " byte" : " bytes") + " = " + gb(weights) + " GB.";
+    const rest = need - weights;
+    if (task === "finetune-full") {
+      return "Full fine-tuning holds the weights, their gradients and Adam optimizer states, about 16 bytes per parameter (" + sizeText(paramsB) + " × 16 = " + gb(paramsB * 16) + " GB), plus activations.";
+    }
+    if (rest < 0.5) return w;
+    if (task === "inference") return w + " The other ~" + gb(rest) + " GB is the KV cache for one request at a 4K-token context, plus runtime headroom.";
+    if (task === "finetune-lora") return w + " The other ~" + gb(rest) + " GB is the LoRA adapters, their optimizer state and activations for a 4K-token batch.";
+    if (task === "generate") return w + " The other ~" + gb(rest) + " GB covers the text encoders, VAE and working memory an image or video pipeline loads with it.";
+    return w + " The other ~" + gb(rest) + " GB is activations and runtime headroom.";
+  }
+
+  function render() {
+    const res = state.result;
+    const s = state.sel;
+    el.out.classList.remove("loading");
+    el.out.removeAttribute("aria-busy");
+    el.status.textContent = "";
+    if (!res || res.error) { showError(esc((res && res.error) || "No answer from FastGPU.")); return; }
+    const w = res.workload || {};
+    // FastGPU decides the job's kind for a model it knows (an image model is sized as a pipeline), so the
+    // sentences follow its answer rather than the menu.
+    const task = TASKS[w.task] ? w.task : el.task.value;
+    const precision = w.precision || "fp16";
+    const precText = PRECISION_TEXT[precision] || precision;
+    const paramsB = s.id ? s.paramsB : s.size;
+    const need = w.vram_required_gb;
+
+    let head = "";
+    if (s.id) {
+      const facts = [sizeText(paramsB) + " parameters"];
+      if (s.format) facts.push(esc(s.format) + " weights");
+      if (s.pipeline) facts.push(esc(s.pipeline));
+      const src = { safetensors: "the repo's safetensors metadata", gguf: "the repo's GGUF header", name: "the model's name (the Hub's count of its packed weights is lower)", catalog: "this Space's model list (Hugging Face did not answer just now)" }[s.paramsSource] || "the repo";
+      head = '<div class="model"><a class="model-id" href="' + HUB + "/" + esc(s.id) + '" target="_blank" rel="noopener">' + esc(s.id) + "</a>" +
+        '<p class="facts">' + facts.join(" · ") + "</p>" +
+        '<p class="fineprint">Parameter count from ' + src + "." + (s.library === "mlx" ? " MLX builds run on Apple silicon; sized here as the same model on a rented GPU." : "") + "</p></div>";
+    } else {
+      head = '<div class="model"><span class="model-id">A ' + esc(sizeText(paramsB)) + "-parameter model</span></div>";
+    }
+
+    const needHtml = need
+      ? '<div class="need"><p class="need-num"><span class="mono">~' + esc(Math.round(need).toLocaleString("en-US")) + "</span> GB</p>" +
+        '<p class="need-what">' + esc(needSentence(task, precText)) + "</p>" +
+        '<p class="fineprint">' + esc(derivation(task, paramsB, precision, need)) +
+        ' <a href="' + link(SITE + "/methodology") + '" target="_blank" rel="noopener">How FastGPU sizes and ranks</a></p></div>'
+      : "";
+
+    let rows = (res.matches || []).slice();
+    if (state.sort === "price") rows.sort(function (a, b) { return a.effective_usd_hr - b.effective_usd_hr; });
+    const cheapest = rows.reduce(function (min, r) { return Math.min(min, r.effective_usd_hr); }, Infinity);
+    const mem = state.gpuMemory || {};
+
+    let table;
+    if (!rows.length) {
+      table = '<div class="notice">No GPU setup in FastGPU\'s live feed holds this ' + (need ? "(~" + esc(Math.round(need)) + " GB) " : "") + "right now with these filters. Try 8-bit or 4-bit weights, another region, or include spot capacity.</div>";
+    } else {
+      table = '<div class="table-head"><h2 id="setups">GPU setups that hold it, priced live</h2>' +
+        '<div class="sort" role="group" aria-label="Order">' +
+        '<button type="button" data-sort="price" aria-pressed="' + (state.sort === "price") + '">Lowest price</button>' +
+        '<button type="button" data-sort="match" aria-pressed="' + (state.sort === "match") + '">Best match</button></div></div>' +
+        '<table aria-labelledby="setups"><thead><tr><th scope="col">Setup</th><th scope="col" class="num">Per hour</th><th scope="col" class="num">Per month</th><th scope="col">Provider</th></tr></thead><tbody>' +
+        rows.map(function (r) {
+          const card = mem[r.gpu];
+          const setup = (r.gpu_count > 1 ? r.gpu_count + "× " : "1× ") + r.gpu;
+          const sub = (card ? card + " GB " + (r.gpu_count > 1 ? "each, " : "") : "") + (r.fits_single_card ? "fits on one card" : "split across " + r.gpu_count + " cards");
+          const kind = [r.offer_type, r.reliability].filter(function (x, i, a) {
+            return x && a.findIndex(function (y) { return y && y.toLowerCase() === x.toLowerCase(); }) === i;
+          }).join(" · ");
+          return "<tr" + (r.effective_usd_hr === cheapest ? ' class="cheapest"' : "") + ">" +
+            '<th scope="row"><span class="setup">' + esc(setup) + '</span><span class="sub">' + esc(sub) + "</span></th>" +
+            '<td class="num"><a class="price" href="' + link(r.page_url) + '" target="_blank" rel="noopener" title="Every live offer for the ' + esc(r.gpu) + ' on FastGPU">' + esc(usd(r.effective_usd_hr)) + "</a>" +
+            (r.effective_usd_hr === cheapest ? '<span class="sub">cheapest</span>' : "") + "</td>" +
+            '<td class="num mono">' + esc(usd(r.monthly_usd)) + "</td>" +
+            "<td>" + esc(r.provider_label) + (r.partner ? ' <span class="star" title="Pays FastGPU a referral fee">★</span>' : "") + '<span class="sub">' + esc(kind) + "</span></td></tr>";
+        }).join("") + "</tbody></table>";
+    }
+
+    const fresh = res.updated_at ? ago(res.updated_at) : null;
+    const foot = '<p class="fineprint">' +
+      (fresh ? "Prices from FastGPU's live feed, refreshed " + esc(fresh) + ". " : "") +
+      "Each price is the whole setup per hour (per-GPU rate × GPUs), per month at 730 hours; it links to every live offer for that GPU. " +
+      "Best match orders by FastGPU's score, led by price and weighing reliability and availability; providers marked ★ pay FastGPU a referral fee and can only win a near-tie there, within a few percent of the cheapest. " +
+      "Some providers bill CPU, RAM or disk on top of the GPU rate; the GPU page says which.</p>" +
+      '<p class="cta"><a class="button" href="' + link(SITE + "/") + '" target="_blank" rel="noopener">Compare every GPU on FastGPU</a>' +
+      '<a href="' + link(SITE + "/gpus") + '" target="_blank" rel="noopener">All live GPU prices</a></p>';
+
+    el.out.innerHTML = head + needHtml + table + foot;
+    el.out.querySelectorAll("button[data-sort]").forEach(function (b) {
+      b.addEventListener("click", function () { state.sort = b.getAttribute("data-sort"); render(); });
+    });
+  }
+
+  // ---------------------------------------------------------------- shareable state
+  function saveHash() {
+    const s = state.sel;
+    if (!s) return;
+    const h = new URLSearchParams();
+    if (s.id) h.set("model", s.id); else h.set("size", String(s.size));
+    if (el.task.value !== "inference") h.set("task", el.task.value);
+    if (el.prec.value !== "auto") h.set("precision", el.prec.value);
+    if (el.region.value) h.set("region", el.region.value);
+    if (el.spot.checked) h.set("spot", "1");
+    try { history.replaceState(null, "", "#" + h.toString()); } catch (e) { /* sandboxed frame */ }
+  }
+  function start() {
+    const raw = (location.hash || "").replace(/^#/, "") || (location.search || "").replace(/^\?/, "");
+    const h = new URLSearchParams(raw);
+    const task = h.get("task");
+    if (task && TASKS[task]) el.task.value = task;
+    const prec = h.get("precision");
+    if (prec && ["fp16", "int8", "int4"].indexOf(prec) >= 0) el.prec.value = prec;
+    const region = h.get("region");
+    if (region && ["US", "EU", "ASIA"].indexOf(region) >= 0) el.region.value = region;
+    el.spot.checked = h.get("spot") === "1";
+    const size = h.get("size") ? parseFloat(h.get("size")) : NaN;
+    if (isFinite(size) && size > 0) { el.input.value = sizeText(size) + " model"; selectSize(size); return; }
+    const model = h.get("model") || DEFAULT_MODEL;
+    el.input.value = model;
+    selectModel(model, !task);
+  }
+  start();
+})();

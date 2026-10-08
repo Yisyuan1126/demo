@@ -1,19 +1,81 @@
 <!doctype html>
-<html>
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<title>My static Space</title>
-		<link rel="stylesheet" href="style.css" />
-	</head>
-	<body>
-		<div class="card">
-			<h1>Welcome to your static Space!</h1>
-			<p>You can modify this app directly by editing <i>index.html</i> in the Files and versions tab.</p>
-			<p>
-				Also don't forget to check the
-				<a href="https://huggingface.co/docs/hub/spaces" target="_blank">Spaces documentation</a>.
-			</p>
-		</div>
-	</body>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VRAM & GPU Cost Calculator: what any Hugging Face model needs, priced live</title>
+  <meta name="description" content="Pick any Hugging Face model and see how much GPU memory it needs to run or fine-tune, and the cheapest GPU setups that hold it, priced live by FastGPU.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Schibsted+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="https://fastgpu.co/?utm_source=huggingface&amp;utm_medium=space&amp;utm_campaign=gpu-cost-calculator" target="_blank" rel="noopener">
+      <svg viewBox="0 0 128 128" width="28" height="28" aria-hidden="true"><rect width="128" height="128" rx="30" class="mark-bg"/><path d="M35 32 L93 32 L83 50 L53 50 L53 56 L75 56 L65 74 L53 74 L53 96 L35 96 Z" class="mark"/></svg>
+      <span>FastGPU</span>
+    </a>
+    <span class="live"><span class="dot" aria-hidden="true"></span>Live GPU prices</span>
+  </header>
+
+  <main>
+    <h1>What GPU does this model need, and what does it cost to rent right now?</h1>
+    <p class="lede">Pick any Hugging Face model. You get the GPU memory it needs and the cheapest GPU setups that hold it, priced live across the clouds FastGPU tracks.</p>
+
+    <form id="calc" class="panel" autocomplete="off">
+      <label class="field-label" for="model">Model</label>
+      <div class="combo">
+        <input id="model" name="model" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions" spellcheck="false" placeholder="Search models, paste org/name, or type a size like 70B…">
+        <ul id="suggestions" role="listbox" aria-label="Models" hidden></ul>
+      </div>
+      <div id="picks" class="picks" aria-label="Popular models"></div>
+
+      <div class="opts">
+        <label>Job
+          <select id="task" name="task">
+            <option value="inference">Run / serve it</option>
+            <option value="finetune-lora">Fine-tune with LoRA</option>
+            <option value="finetune-full">Full fine-tune</option>
+            <option value="generate">Generate images or video</option>
+            <option value="transcribe">Transcribe speech</option>
+            <option value="embed">Embed text</option>
+          </select>
+        </label>
+        <label>Weights
+          <select id="precision" name="precision">
+            <option value="auto">As published</option>
+            <option value="fp16">16-bit (BF16 / FP16)</option>
+            <option value="int8">8-bit (FP8 / INT8)</option>
+            <option value="int4">4-bit (INT4 / AWQ / GGUF Q4)</option>
+          </select>
+        </label>
+        <label>Region
+          <select id="region" name="region">
+            <option value="">Anywhere</option>
+            <option value="US">US</option>
+            <option value="EU">EU</option>
+            <option value="ASIA">Asia</option>
+          </select>
+        </label>
+        <label class="check"><input id="spot" name="spot" type="checkbox"> Include spot (interruptible) capacity</label>
+      </div>
+    </form>
+
+    <p id="status" class="status" role="status"></p>
+    <section id="result" class="result" aria-live="polite"></section>
+  </main>
+
+  <footer>
+    <p>Sizing and prices come from <a href="https://fastgpu.co/?utm_source=huggingface&amp;utm_medium=space&amp;utm_campaign=gpu-cost-calculator" target="_blank" rel="noopener">FastGPU</a>, which compares live GPU rental prices across marketplaces, neoclouds and hyperscalers. Model facts come from the Hugging Face Hub.</p>
+    <p class="links">
+      <a href="https://huggingface.co/datasets/fastgpu/cloud-gpu-prices" target="_blank" rel="noopener">Open price dataset (CC BY 4.0)</a>
+      <a href="https://fastgpu.co/docs?utm_source=huggingface&amp;utm_medium=space&amp;utm_campaign=gpu-cost-calculator" target="_blank" rel="noopener">Free API</a>
+      <a href="https://fastgpu.co/methodology?utm_source=huggingface&amp;utm_medium=space&amp;utm_campaign=gpu-cost-calculator" target="_blank" rel="noopener">Method</a>
+    </p>
+  </footer>
+
+  <script src="catalog.js"></script>
+  <script src="app.js"></script>
+</body>
 </html>
