@@ -3,7 +3,7 @@
  *
  * Runs entirely in the visitor's browser. Two public, keyless reads:
  *   1. the Hugging Face Hub API, for the model's own metadata (parameter count from its safetensors or GGUF
- *      header, its weight format, its task);
+ *      header, its weight format, its task) and, for a GGUF repo, the size of each build it holds;
  *   2. FastGPU's match API (https://fastgpu.co/api/v1/match), which sizes the job and ranks the GPU setups
  *      that hold it at live prices. All sizing is FastGPU's, so this page and fastgpu.co never disagree.
  * The model list (catalog.js with the page, catalog-more.js right after the first answer) only powers search
@@ -63,7 +63,7 @@
   };
 
   const state = {
-    sel: null,        // { id, paramsB, paramsSource, bits, format, pipeline, gated } or { size: N }
+    sel: null,        // { id, paramsB, paramsSource, bits, format, pipeline, gated, builds } or { size: N }
     result: null,     // last match API answer
     sort: "price",
     gpuMemory: null,  // { "H100 SXM": 80, ... } from FastGPU's GPU list
@@ -172,6 +172,84 @@
     return top || null;
   }
 
+  // ---------------------------------------------------------------- GGUF builds
+  // A GGUF repo holds one file (or one set of split files) per build: Q4_K_M, Q5_K_M, Q8_0... Each has its
+  // own size, and that size is the weights a GPU has to hold, so a GGUF repo is sized from the build's file
+  // rather than from a nominal bit count (a "4-bit" Q4_K_M stores close to 5 bits per parameter).
+  const BUILD_TOKEN = /(?:^|[-_.])((?:I?Q\d+(?:_[A-Z0-9]+)*)|BF16|FP?16|FP?32)(?=[-_.]|$)/i;
+  // The build most people load, then the nearest ones, when the visitor has not picked.
+  const BUILD_PREFERENCE = ["Q4_K_M", "Q4_K_S", "Q4_0", "Q4_K_L", "Q4_K_XL", "IQ4_XS", "Q5_K_M", "Q5_K_S", "Q3_K_M", "Q6_K", "Q8_0"];
+  const STORED_BITS = [1, 40]; // what a published weight file can hold per parameter; FastGPU's API checks the same range
+  function ggufBuilds(files, paramsB) {
+    const byFile = new Map();
+    (files || []).forEach(function (f) {
+      if (!f || f.type !== "file" || !/\.gguf$/i.test(f.path)) return;
+      const parts = f.path.split("/");
+      const name = parts.pop().replace(/\.gguf$/i, "");
+      if (/mmproj|imatrix|vocab|tokenizer/i.test(name)) return; // projectors and calibration data, not weights
+      const base = name.replace(/-\d{5}-of-\d{5}$/, "");        // a split build is one build
+      const token = (base.match(BUILD_TOKEN) || parts.join("/").match(BUILD_TOKEN) || [])[1];
+      if (!token) return;
+      const key = parts.join("/") + "/" + base;
+      const size = (f.lfs && f.lfs.size) || f.size || 0;
+      const b = byFile.get(key) || { quant: token.toUpperCase(), file: base, bytes: 0 };
+      b.bytes += size;
+      byFile.set(key, b);
+    });
+    // Keep the builds that can be this model's weights (another model's file, or an empty pointer, is not).
+    const real = [];
+    byFile.forEach(function (b) {
+      const gbSize = b.bytes / 1e9;
+      const bits = paramsB ? (gbSize * 8) / paramsB : 0;
+      if (bits >= STORED_BITS[0] && bits <= STORED_BITS[1]) real.push({ quant: b.quant, file: b.file, gb: gbSize, bits: bits });
+    });
+    // Two real files with the same build name are two models in one repo: tell them apart by file name.
+    const seen = new Map();
+    real.forEach(function (b) { seen.set(b.quant, (seen.get(b.quant) || 0) + 1); });
+    const out = real.map(function (b) {
+      return { key: seen.get(b.quant) > 1 ? b.file : b.quant, quant: b.quant, gb: b.gb, bits: b.bits };
+    });
+    out.sort(function (a, b) { return a.gb - b.gb; });
+    return out.slice(0, 60);
+  }
+  function defaultBuild(builds) {
+    for (let i = 0; i < BUILD_PREFERENCE.length; i++) {
+      const hit = builds.find(function (b) { return b.quant === BUILD_PREFERENCE[i]; });
+      if (hit) return hit;
+    }
+    return builds[0] || null;
+  }
+  function chosenBuild() {
+    const s = state.sel;
+    if (!s || !s.builds || !s.builds.length || el.prec.value.indexOf("build:") !== 0) return null;
+    const key = el.prec.value.slice(6);
+    return s.builds.find(function (b) { return b.key === key; }) || null;
+  }
+  // The "Weights" menu: a GGUF repo's own builds with their sizes, otherwise the precision classes.
+  const PRECISION_OPTIONS = el.prec.innerHTML;
+  function setWeightOptions(builds, wanted) {
+    if (!builds || !builds.length) {
+      if (el.prec.getAttribute("data-kind") === "builds") { el.prec.innerHTML = PRECISION_OPTIONS; el.prec.value = "auto"; }
+      el.prec.removeAttribute("data-kind");
+      return;
+    }
+    el.prec.innerHTML = builds.map(function (b) {
+      return '<option value="build:' + esc(b.key) + '">' + esc(b.key) + " · " + esc(gb(b.gb)) + " GB</option>";
+    }).join("");
+    el.prec.setAttribute("data-kind", "builds");
+    const pick = (wanted && builds.find(function (b) { return b.key.toLowerCase() === wanted.toLowerCase(); })) || defaultBuild(builds);
+    el.prec.value = "build:" + pick.key;
+  }
+  async function readBuilds(id, paramsB) {
+    const path = id.split("/").map(encodeURIComponent).join("/");
+    try {
+      const files = await getJson(HUB + "/api/models/" + path + "/tree/main?recursive=true&expand=false&limit=1000", 8000);
+      return ggufBuilds(files, paramsB);
+    } catch (e) {
+      return []; // the repo is then sized by its parameter count, as a non-GGUF repo is
+    }
+  }
+
   // ---------------------------------------------------------------- model metadata
   async function readModel(id) {
     const path = id.split("/").map(encodeURIComponent).join("/");
@@ -185,6 +263,9 @@
     else if (total) { paramsB = total; source = meta.safetensors && meta.safetensors.total ? "safetensors" : "gguf"; }
     else if (stated) { paramsB = stated; source = "name"; }
     const bits = weightBits(meta, meta.id || id);
+    // Builds are read for a repo that is GGUF only, whose size came from its GGUF header (the files then
+    // belong to the model that count describes).
+    const builds = meta.gguf && !meta.safetensors && source === "gguf" ? await readBuilds(meta.id || id, paramsB) : [];
     return {
       id: meta.id || id,
       paramsB: paramsB,
@@ -194,6 +275,7 @@
       pipeline: meta.pipeline_tag || null,
       library: meta.library_name || null,
       gated: !!meta.gated,
+      builds: builds,
     };
   }
 
@@ -359,7 +441,7 @@
   el.form.addEventListener("submit", function (e) { e.preventDefault(); });
 
   // ---------------------------------------------------------------- selection
-  async function selectModel(id, resetTask) {
+  async function selectModel(id, resetTask, wantedBuild) {
     const seq = ++state.seq;
     const known = BY_ID.get(id.toLowerCase());
     setStatus("Reading " + id + " from Hugging Face…");
@@ -384,11 +466,13 @@
       el.task.value = t;
       el.prec.value = "auto";
     }
+    setWeightOptions(sel.builds, wantedBuild);
     saveHash();
     run();
   }
   function selectSize(size) {
     state.sel = { size: size };
+    setWeightOptions(null);
     el.prec.value = el.prec.value || "auto";
     saveHash();
     run();
@@ -410,8 +494,16 @@
     const paramsB = s.id ? s.paramsB : s.size;
     if (paramsB) params.set("params_b", String(Math.round(paramsB * 100) / 100));
     params.set("task", el.task.value);
-    const prec = el.prec.value === "auto" ? autoPrecision() : el.prec.value;
-    if (prec) params.set("precision", prec);
+    const build = chosenBuild();
+    if (build) {
+      // The build's size on the Hub is the weights to hold. Its precision class goes with it (the same split
+      // FastGPU's API makes: under 6 bits per parameter is a 4-bit class build, under 12 an 8-bit one).
+      params.set("weights_gb", String(Math.round(build.gb * 100) / 100));
+      params.set("precision", build.bits < 6 ? "int4" : build.bits < 12 ? "int8" : "fp16");
+    } else {
+      const prec = el.prec.value === "auto" ? autoPrecision() : el.prec.value;
+      if (prec) params.set("precision", prec);
+    }
     if (el.region.value) params.set("region", el.region.value);
     if (el.spot.checked) params.set("spot", "true");
     if (s.id && !paramsB) {
@@ -466,7 +558,11 @@
     el.out.innerHTML = '<div class="notice">' + html + "</div>";
   }
 
-  function needSentence(task, precText) {
+  function needSentence(task, precText, build) {
+    if (build && task !== "finetune-full") {
+      const what = "its " + build.key + " build";
+      return task === "finetune-lora" ? "of GPU memory to fine-tune " + what + " with LoRA" : "of GPU memory to run " + what;
+    }
     switch (task) {
       case "finetune-lora": return "of GPU memory to fine-tune it with LoRA at " + precText;
       case "finetune-full": return "of GPU memory for a full fine-tune";
@@ -476,11 +572,13 @@
       default: return "of GPU memory to run it at " + precText;
     }
   }
-  function derivation(task, rawParamsB, precision, need) {
+  function derivation(task, rawParamsB, precision, need, build) {
     const bytes = BYTES[precision];
     const paramsB = shownParams(rawParamsB);
-    const weights = paramsB * bytes;
-    const w = "Weights: " + sizeText(paramsB) + " parameters × " + bytes + (bytes === 1 ? " byte" : " bytes") + " = " + gb(weights) + " GB.";
+    const weights = build ? build.gb : paramsB * bytes;
+    const w = build
+      ? "Weights: the " + build.key + " build in this repo is " + gb(build.gb) + " GB (" + gb(build.gb) + " GB × 8 ÷ " + sizeText(paramsB) + " parameters = " + (Math.round(((build.gb * 8) / paramsB) * 100) / 100) + " bits per parameter)."
+      : "Weights: " + sizeText(paramsB) + " parameters × " + bytes + (bytes === 1 ? " byte" : " bytes") + " = " + gb(weights) + " GB.";
     const rest = need - weights;
     if (task === "finetune-full") {
       return "Full fine-tuning holds the weights, their gradients and Adam optimizer states, about 16 bytes per parameter (" + sizeText(paramsB) + " × 16 = " + gb(paramsB * 16) + " GB), plus activations.";
@@ -507,6 +605,10 @@
     const precText = PRECISION_TEXT[precision] || precision;
     const paramsB = s.id ? s.paramsB : s.size;
     const need = w.vram_required_gb;
+    // The build the answer was sized by: only when FastGPU's answer says it used a measured weights size, so
+    // the sentences never describe a sizing the number does not come from.
+    const picked = chosenBuild();
+    const build = picked && w.weights_gb ? picked : null;
 
     let head = "";
     if (s.id) {
@@ -523,8 +625,8 @@
 
     const needHtml = need
       ? '<div class="need"><p class="need-num"><span class="mono">~' + esc(Math.round(need).toLocaleString("en-US")) + "</span> GB</p>" +
-        '<p class="need-what">' + esc(needSentence(task, precText)) + "</p>" +
-        '<p class="fineprint">' + esc(derivation(task, paramsB, precision, need)) +
+        '<p class="need-what">' + esc(needSentence(task, precText, build)) + "</p>" +
+        '<p class="fineprint">' + esc(derivation(task, paramsB, precision, need, build)) +
         ' <a href="' + link(SITE + "/methodology") + '" target="_blank" rel="noopener">How FastGPU sizes and ranks</a></p></div>'
       : "";
 
@@ -581,7 +683,8 @@
     const h = new URLSearchParams();
     if (s.id) h.set("model", s.id); else h.set("size", String(s.size));
     if (el.task.value !== "inference") h.set("task", el.task.value);
-    if (el.prec.value !== "auto") h.set("precision", el.prec.value);
+    if (el.prec.value.indexOf("build:") === 0) h.set("build", el.prec.value.slice(6));
+    else if (el.prec.value !== "auto") h.set("precision", el.prec.value);
     if (el.region.value) h.set("region", el.region.value);
     if (el.spot.checked) h.set("spot", "1");
     try { history.replaceState(null, "", "#" + h.toString()); } catch (e) { /* sandboxed frame */ }
@@ -600,7 +703,10 @@
     if (isFinite(size) && size > 0) { el.input.value = sizeText(size) + " model"; selectSize(size); return; }
     const model = h.get("model") || DEFAULT_MODEL;
     el.input.value = model;
-    selectModel(model, !task);
+    // A link that states the job, the weights or the build is opened as it was saved; a bare model link
+    // gets the job its kind of model does.
+    const build = h.get("build") || undefined;
+    selectModel(model, !(task || prec || build), build);
   }
   // The rest of the model list, fetched after the first answer is under way so it never delays it.
   function loadMore() {

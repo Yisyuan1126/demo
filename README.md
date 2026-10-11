@@ -10662,7 +10662,9 @@ The same way as on fastgpu.co, by FastGPU's matcher:
 - **Full fine-tune:** about 16 bytes per parameter (weights, gradients and Adam states) plus activations.
 - **Image, video, speech and embedding models** FastGPU knows (FLUX, SDXL, Wan, Whisper and more) use a figure for the whole pipeline, text encoders and VAE included.
 
-A quantized repo (AWQ, GPTQ, FP8, NVFP4, bitsandbytes, GGUF) is sized at the bits it is stored in unless you pick another precision. The full method: [fastgpu.co/methodology](https://fastgpu.co/methodology?utm_source=huggingface&utm_medium=space&utm_campaign=gpu-cost-calculator).
+A quantized repo (AWQ, GPTQ, FP8, NVFP4, bitsandbytes) is sized at the bits it is stored in unless you pick another precision.
+
+A GGUF repo is sized from the build you pick. The Weights menu lists the builds the repo holds (Q4_K_M, Q5_K_M, Q8_0 and so on) with the size of each file on the Hub, and that file is the weights a GPU has to hold: a build called 4-bit stores more than 4 bits per parameter, so sizing it from the name comes out too small. The answer shows the file's size and the bits per parameter it works out to. The full method: [fastgpu.co/methodology](https://fastgpu.co/methodology?utm_source=huggingface&utm_medium=space&utm_campaign=gpu-cost-calculator).
 
 ## Where the prices come from
 
