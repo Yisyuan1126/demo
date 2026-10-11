@@ -6,7 +6,8 @@
  *      header, its weight format, its task);
  *   2. FastGPU's match API (https://fastgpu.co/api/v1/match), which sizes the job and ranks the GPU setups
  *      that hold it at live prices. All sizing is FastGPU's, so this page and fastgpu.co never disagree.
- * The model list in catalog.js only powers search and quick picks; every selection is re-read live.
+ * The model list (catalog.js with the page, catalog-more.js right after the first answer) only powers search
+ * and quick picks; every selection is re-read live. A name the list does not hold is searched on the Hub.
  */
 (function () {
   "use strict";
@@ -15,6 +16,7 @@
   const API = SITE + "/api/v1/match";
   const GPUS_API = SITE + "/api/v1/gpus";
   const HUB = "https://huggingface.co";
+  const SPACE_PAGE = HUB + "/spaces/fastgpu/vram-and-gpu-cost-calculator";
   const UTM = { utm_source: "huggingface", utm_medium: "space", utm_campaign: "gpu-cost-calculator" };
   const DEFAULT_MODEL = "Qwen/Qwen3-32B";
   const PICKS = window.FASTGPU_PICKS || [];
@@ -22,6 +24,18 @@
     return { id: r[0], p: r[1], task: r[2], dl: r[3], q: r[4], low: r[0].toLowerCase() };
   });
   const BY_ID = new Map(CATALOG.map(function (m) { return [m.low, m]; }));
+  const MORE_JOBS = ["inference", "generate", "transcribe", "embed"];
+  // The rest of the list arrives most-downloaded first without a downloads column, and every row in it has
+  // fewer downloads than the rows above, so its place in the file ranks it (a negative, falling "dl").
+  function addModels(rows) {
+    (rows || []).forEach(function (r, i) {
+      const low = r[0].toLowerCase();
+      if (BY_ID.has(low)) return;
+      const m = { id: r[0], p: r[1], task: MORE_JOBS[r[2]] || "inference", dl: -1 - i, q: r[3] || null, low: low };
+      CATALOG.push(m);
+      BY_ID.set(low, m);
+    });
+  }
 
   const TASKS = {
     inference: "Run / serve it",
@@ -56,6 +70,8 @@
     seq: 0,           // request counter, so a slow answer never overwrites a newer one
     active: -1,       // highlighted suggestion
     options: [],
+    hubSeq: 0,        // Hub search counter, so a late answer never lands on newer text
+    hubTimer: null,
   };
 
   // ---------------------------------------------------------------- helpers
@@ -132,6 +148,7 @@
     }
     const top = dominantDtype(meta);
     if (top && top.indexOf("F8") === 0) return 8;
+    if (/(^|[-_./])(fp16|f16|bf16|fp32|f32)([-_./]|$)/i.test(id)) return null;
     if (meta.gguf && !meta.safetensors) return 4;
     const n = id.toLowerCase();
     if (/(^|[-_./])(4bit|4-bit|int4|w4a16|awq|gptq|nf4|mxfp4|nvfp4|q4)/.test(n)) return 4;
@@ -181,6 +198,12 @@
   }
 
   // ---------------------------------------------------------------- search box
+  // "https://huggingface.co/org/name/tree/main" (the address bar of a model page) names the repo org/name.
+  const HUB_PAGES = /^(models|spaces|datasets|docs|blog|posts|collections|settings|organizations|new|join|login|pricing|tasks|papers|learn|chat|api)$/i;
+  function repoFromText(text) {
+    const m = text.trim().match(/^(?:https?:\/\/)?(?:www\.)?(?:huggingface\.co|hf\.co)\/([\w.-]+)\/([\w.-]+)/i);
+    return m && !HUB_PAGES.test(m[1]) ? m[1] + "/" + m[2] : null;
+  }
   function sizeQuery(text) {
     const m = text.trim().match(/^~?(\d+(?:\.\d+)?)\s*([bt])?(?:\s*(?:params?|parameters?))?$/i);
     if (!m) return null;
@@ -188,6 +211,8 @@
     return n >= 0.05 && n <= 5000 ? n : null;
   }
   function suggest(text) {
+    const pasted = repoFromText(text);
+    if (pasted) text = pasted;
     const t = text.trim().toLowerCase();
     const out = [];
     if (!t) {
@@ -208,7 +233,41 @@
     scored.sort(function (a, b) { return b.score - a.score || b.m.dl - a.m.dl; });
     scored.slice(0, 8).forEach(function (s) { out.push({ kind: "model", m: s.m }); });
     if (/^[\w.-]+\/[\w.-]+$/.test(text.trim()) && !BY_ID.has(t)) out.unshift({ kind: "hub", id: text.trim() });
+    else if (pasted && BY_ID.has(t)) { const hit = BY_ID.get(t); return [{ kind: "model", m: hit }]; }
     return out.slice(0, 9);
+  }
+  // Names the list does not hold are searched on the Hub itself, a moment after typing stops (or at once on
+  // Enter). Its answers join the open list under the ones already there; picking one reads that repo like
+  // any other. `asked` is set when the visitor pressed Enter with nothing to pick, so an empty answer says so.
+  function hubSearch(text, asked) {
+    clearTimeout(state.hubTimer);
+    const seq = ++state.hubSeq;
+    const q = (repoFromText(text) || text).trim();
+    if (q.length < 3 || sizeQuery(q) || state.options.filter(function (o) { return o.kind === "model"; }).length >= 8) {
+      if (asked) el.status.textContent = "";
+      return;
+    }
+    const none = "Hugging Face has no public model matching " + esc(q) + ". Paste the model's org/name or its page address, or type a size such as 70B.";
+    state.hubTimer = setTimeout(function () {
+      getJson(HUB + "/api/models?search=" + encodeURIComponent(q) + "&sort=downloads&direction=-1&limit=8", 6000).then(function (rows) {
+        if (seq !== state.hubSeq || !Array.isArray(rows)) return;
+        if (!asked && document.activeElement !== el.input) return; // the visitor has left the box
+        const shown = new Set(state.options.map(function (o) { return (o.kind === "model" ? o.m.id : o.id || "").toLowerCase(); }));
+        rows.forEach(function (r) {
+          if (!r || !r.id || r.id.indexOf("/") < 0 || shown.has(r.id.toLowerCase()) || state.options.length >= 9) return;
+          const known = BY_ID.get(r.id.toLowerCase());
+          state.options.push(known ? { kind: "model", m: known } : { kind: "hub", id: r.id, found: true });
+          shown.add(r.id.toLowerCase());
+        });
+        if (!state.options.length) { if (asked) showError(none); return; }
+        if (asked) el.status.textContent = "";
+        if (state.active < 0) state.active = 0;
+        renderSuggestions();
+      }).catch(function () {
+        // The list already shows what this page knows; only a visitor who asked is told the Hub did not answer.
+        if (asked && seq === state.hubSeq) showError("Hugging Face's search did not answer just now. Paste the model's org/name, or type a size such as 70B.");
+      });
+    }, asked ? 0 : 250);
   }
   function renderSuggestions() {
     const opts = state.options;
@@ -216,7 +275,7 @@
     el.list.innerHTML = opts.map(function (o, i) {
       const sel = i === state.active ? ' aria-selected="true"' : "";
       if (o.kind === "size") return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">A ' + esc(sizeText(o.size)) + "-parameter model</span><span class=\"opt-meta\">size only</span></li>";
-      if (o.kind === "hub") return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">' + esc(o.id) + '</span><span class="opt-meta">look it up on Hugging Face</span></li>';
+      if (o.kind === "hub") return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">' + esc(o.id) + '</span><span class="opt-meta">' + (o.found ? "on Hugging Face" : "look it up on Hugging Face") + "</span></li>";
       return '<li role="option" id="opt-' + i + '"' + sel + ' data-i="' + i + '"><span class="opt-name">' + esc(o.m.id) + '</span><span class="opt-meta">' + esc(sizeText(o.m.p)) + " · " + esc(TASKS[o.m.task] || o.m.task) + "</span></li>";
     }).join("");
     el.list.hidden = false;
@@ -229,7 +288,12 @@
     el.input.removeAttribute("aria-activedescendant");
     state.active = -1;
   }
+  function cancelHubSearch() {
+    clearTimeout(state.hubTimer);
+    state.hubSeq++;
+  }
   function choose(o) {
+    cancelHubSearch();
     closeSuggestions();
     if (!o) return;
     if (o.kind === "size") { el.input.value = sizeText(o.size) + " model"; selectSize(o.size); return; }
@@ -242,6 +306,7 @@
     state.options = suggest(el.input.value);
     state.active = state.options.length ? 0 : -1;
     renderSuggestions();
+    hubSearch(el.input.value);
   });
   el.input.addEventListener("focus", function () {
     state.options = suggest(el.input.value === (state.sel && state.sel.id) ? "" : el.input.value);
@@ -260,7 +325,11 @@
       e.preventDefault();
       if (!el.list.hidden && state.active >= 0) { choose(state.options[state.active]); return; }
       const opts = suggest(el.input.value);
-      choose(opts[0]);
+      if (opts.length) { choose(opts[0]); return; }
+      // Nothing in the list: ask the Hub now and offer what it finds.
+      state.options = [];
+      el.status.textContent = "Searching Hugging Face…";
+      hubSearch(el.input.value, true);
     } else if (e.key === "Escape") {
       closeSuggestions();
     }
@@ -279,6 +348,7 @@
   el.picks.addEventListener("click", function (e) {
     const b = e.target.closest("button[data-id]");
     if (!b) return;
+    cancelHubSearch();
     el.input.value = b.getAttribute("data-id");
     selectModel(b.getAttribute("data-id"), true);
   });
@@ -495,7 +565,8 @@
       "Best match orders by FastGPU's score, led by price and weighing reliability and availability; providers marked ★ pay FastGPU a referral fee and can only win a near-tie there, within a few percent of the cheapest. " +
       "Some providers bill CPU, RAM or disk on top of the GPU rate; the GPU page says which.</p>" +
       '<p class="cta"><a class="button" href="' + link(SITE + "/") + '" target="_blank" rel="noopener">Compare every GPU on FastGPU</a>' +
-      '<a href="' + link(SITE + "/gpus") + '" target="_blank" rel="noopener">All live GPU prices</a></p>';
+      '<a href="' + link(SITE + "/gpus") + '" target="_blank" rel="noopener">All live GPU prices</a></p>' +
+      '<p class="fineprint thanks">Saved you a search? A like on <a href="' + SPACE_PAGE + '" target="_blank" rel="noopener">this Space</a> helps other people on the Hub find it.</p>';
 
     el.out.innerHTML = head + needHtml + table + foot;
     el.out.querySelectorAll("button[data-sort]").forEach(function (b) {
@@ -531,5 +602,21 @@
     el.input.value = model;
     selectModel(model, !task);
   }
+  // The rest of the model list, fetched after the first answer is under way so it never delays it.
+  function loadMore() {
+    const tag = document.createElement("script");
+    tag.src = "catalog-more.js";
+    tag.async = true;
+    tag.onload = function () {
+      addModels(window.FASTGPU_CATALOG_MORE);
+      window.FASTGPU_CATALOG_MORE = null;
+      if (!el.list.hidden && document.activeElement === el.input) {
+        state.options = suggest(el.input.value === (state.sel && state.sel.id) ? "" : el.input.value);
+        renderSuggestions();
+      }
+    };
+    document.head.appendChild(tag);
+  }
   start();
+  loadMore();
 })();
