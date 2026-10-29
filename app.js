@@ -225,6 +225,12 @@
     const key = el.prec.value.slice(6);
     return s.builds.find(function (b) { return b.key === key; }) || null;
   }
+  // What the answer is sized from: the GGUF build picked, else a quantized repo's published files while the Weights
+  // menu says "As published" (picking 16, 8 or 4 bits sizes the model at that class instead).
+  function sizingBuild() {
+    const s = state.sel;
+    return chosenBuild() || (s && s.published && el.prec.value === "auto" ? s.published : null);
+  }
   // The "Weights" menu: a GGUF repo's own builds with their sizes, otherwise the precision classes.
   const PRECISION_OPTIONS = el.prec.innerHTML;
   function setWeightOptions(builds, wanted) {
@@ -249,6 +255,28 @@
       return []; // the repo is then sized by its parameter count, as a non-GGUF repo is
     }
   }
+  // A quantized safetensors repo (FP8, FP4, mixed: DeepSeek V4, Kimi, MiniMax...) stores its own mix of bits, which a
+  // nominal class gets wrong in both directions (DeepSeek-V4.1-Flash's config says FP8, its files hold 5.35 bits per
+  // parameter). Its published files are the weights a GPU holds, so "As published" sizes from their total, as a GGUF
+  // build is. Only the repo's top-level weight files count (a "consolidated" copy duplicates the shards), and only a
+  // total that works out under 12 bits per parameter (an unquantized repo is sized by its count as before).
+  function publishedWeights(files, paramsB) {
+    const top = (files || []).filter(function (f) { return f && f.type === "file" && /\.safetensors$/i.test(f.path) && f.path.indexOf("/") < 0; });
+    const shards = top.filter(function (f) { return !/^consolidated/i.test(f.path); });
+    const use = shards.length ? shards : top;
+    const bytes = use.reduce(function (n, f) { return n + ((f.lfs && f.lfs.size) || f.size || 0); }, 0);
+    const gbSize = bytes / 1e9;
+    const bits = paramsB ? (gbSize * 8) / paramsB : 0;
+    return bits >= STORED_BITS[0] && bits < 12 ? { key: null, gb: gbSize, bits: bits } : null;
+  }
+  async function readPublished(id, paramsB) {
+    const path = id.split("/").map(encodeURIComponent).join("/");
+    try {
+      return publishedWeights(await getJson(HUB + "/api/models/" + path + "/tree/main?recursive=true&expand=false&limit=1000", 8000), paramsB);
+    } catch (e) {
+      return null;
+    }
+  }
 
   // ---------------------------------------------------------------- model metadata
   async function readModel(id) {
@@ -266,7 +294,11 @@
     // Builds are read for a repo that is GGUF only, whose size came from its GGUF header (the files then
     // belong to the model that count describes).
     const builds = meta.gguf && !meta.safetensors && source === "gguf" ? await readBuilds(meta.id || id, paramsB) : [];
+    // A safetensors repo that says it is quantized (by its config or its tensors) is sized from its published files.
+    const quantized = bits || ((meta.config && meta.config.quantization_config) ? true : false);
+    const published = !builds.length && meta.safetensors && source === "safetensors" && quantized ? await readPublished(meta.id || id, paramsB) : null;
     return {
+      published: published,
       id: meta.id || id,
       paramsB: paramsB,
       paramsSource: source,
@@ -498,7 +530,7 @@
     const paramsB = s.id ? s.paramsB : s.size;
     if (paramsB) params.set("params_b", String(Math.round(paramsB * 100) / 100));
     params.set("task", el.task.value);
-    const build = chosenBuild();
+    const build = sizingBuild();
     if (build) {
       // The build's size on the Hub is the weights to hold. Its precision class goes with it (the same split
       // FastGPU's API makes: under 6 bits per parameter is a 4-bit class build, under 12 an 8-bit one).
@@ -564,7 +596,7 @@
 
   function needSentence(task, precText, build) {
     if (build && task !== "finetune-full") {
-      const what = "its " + build.key + " build";
+      const what = build.key ? "its " + build.key + " build" : "it as published";
       return task === "finetune-lora" ? "of GPU memory to fine-tune " + what + " with LoRA" : "of GPU memory to run " + what;
     }
     switch (task) {
@@ -581,7 +613,7 @@
     const paramsB = shownParams(rawParamsB);
     const weights = build ? build.gb : paramsB * bytes;
     const w = build
-      ? "Weights: the " + build.key + " build in this repo is " + gb(build.gb) + " GB (" + gb(build.gb) + " GB × 8 ÷ " + sizeText(paramsB) + " parameters = " + (Math.round(((build.gb * 8) / paramsB) * 100) / 100) + " bits per parameter)."
+      ? "Weights: " + (build.key ? "the " + build.key + " build in this repo is " : "this repo's published weight files are ") + gb(build.gb) + " GB (" + gb(build.gb) + " GB × 8 ÷ " + sizeText(paramsB) + " parameters = " + (Math.round(((build.gb * 8) / paramsB) * 100) / 100) + " bits per parameter)."
       : "Weights: " + sizeText(paramsB) + " parameters × " + bytes + (bytes === 1 ? " byte" : " bytes") + " = " + gb(weights) + " GB.";
     const rest = need - weights;
     if (task === "finetune-full") {
@@ -611,7 +643,7 @@
     const need = w.vram_required_gb;
     // The build the answer was sized by: only when FastGPU's answer says it used a measured weights size, so
     // the sentences never describe a sizing the number does not come from.
-    const picked = chosenBuild();
+    const picked = sizingBuild();
     const build = picked && w.weights_gb ? picked : null;
 
     let head = "";
