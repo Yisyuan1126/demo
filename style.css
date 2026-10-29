@@ -148,6 +148,8 @@ tbody th { font-weight: 500; }
 tr.cheapest .price { color: var(--good); }
 tr.cheapest .num .sub { color: var(--good); }
 .star { color: #c58a00; }
+.rent { margin-left: 6px; font-weight: 600; color: var(--brand-ink); text-decoration: none; white-space: nowrap; }
+.rent:hover { text-decoration: underline; }
 
 .notice { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .linklike { font: inherit; color: var(--brand-ink); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }

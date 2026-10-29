@@ -656,7 +656,10 @@
             '<td class="num"><a class="price" href="' + link(r.page_url) + '" target="_blank" rel="noopener" title="Every live offer for the ' + esc(r.gpu) + ' on FastGPU">' + esc(usd(r.effective_usd_hr)) + "</a>" +
             (r.effective_usd_hr === cheapest ? '<span class="sub">cheapest</span>' : "") + "</td>" +
             '<td class="num mono">' + esc(usd(r.monthly_usd)) + "</td>" +
-            "<td>" + esc(r.provider_label) + (r.partner ? ' <span class="star" title="Pays FastGPU a referral fee">★</span>' : "") + '<span class="sub">' + esc(kind) + "</span></td></tr>";
+            "<td>" + esc(r.provider_label) + (r.partner ? ' <span class="star" title="Pays FastGPU a referral fee">★</span>' : "") +
+            // Straight to this offer on the provider's site, through FastGPU's counted redirect (rent_url).
+            (r.rent_url ? ' <a class="rent" href="' + esc(r.rent_url.replace(/&src=[a-z]+$/, "&src=hf-space")) + '" target="_blank" rel="sponsored noopener">Rent →</a>' : "") +
+            '<span class="sub">' + esc(kind) + "</span></td></tr>";
         }).join("") + "</tbody></table>";
     }
 
@@ -664,7 +667,7 @@
     const foot = '<p class="fineprint">' +
       (fresh ? "Prices from FastGPU's live feed, refreshed " + esc(fresh) + ". " : "") +
       "Each price is the whole setup per hour (per-GPU rate × GPUs), per month at 730 hours; it links to every live offer for that GPU. " +
-      "Best match orders by FastGPU's score, led by price and weighing reliability and availability; providers marked ★ pay FastGPU a referral fee and can only win a near-tie there, within a few percent of the cheapest. " +
+      "Best match orders by FastGPU's score, led by price and weighing reliability and availability. Providers marked ★ pay FastGPU a referral fee when you rent from them through FastGPU; that never changes their order here. " +
       "Some providers bill CPU, RAM or disk on top of the GPU rate; the GPU page says which.</p>" +
       '<p class="cta"><a class="button" href="' + link(SITE + "/") + '" target="_blank" rel="noopener">Compare every GPU on FastGPU</a>' +
       '<a href="' + link(SITE + "/gpus") + '" target="_blank" rel="noopener">All live GPU prices</a></p>' +
