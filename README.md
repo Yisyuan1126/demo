@@ -16,6 +16,8 @@ tags:
   - fine-tuning
   - llm
   - cloud-gpu
+datasets:
+  - fastgpu/cloud-gpu-prices
 models:
   - deepseek-ai/DeepSeek-V4.1-Flash-1017
   - Nanbeige/Nanbeige4.3-33B
@@ -31,8 +33,8 @@ models:
   - unsloth/flint-GGUF
   - fishaudio/drama-3
   - XHToken/Spark-X2.6-4B-GGUF
-  - InternScience/Sage-A1.5
   - unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF
+  - InternScience/Sage-A1.5
   - Qwen/Qwen3.8-Flash-Next
   - ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF
   - Diffuspace/Clover-35B-A3B-Preview
@@ -42,60 +44,60 @@ models:
   - jialinyyzz/humanizer
   - BreezeBlue/Breeze-TTS-2
   - KRAFTON/Raon-1-mini-preview
-  - MemTensor/MemT-1.0-Nano
   - inclusionAI/Ling-3.1-flash-1019
+  - MemTensor/MemT-1.0-Nano
   - tencent/WeVisOne-VL-4B
   - inclusionAI/Ling-3.0-flash-Sante
-  - lodestones/Kromoss
   - deepseek-ai/DeepSeek-V4.1-Flash
   - briaai/Fibo-2.0-dev
   - Nanbeige/Nanbeige4.3-33B-Base
+  - lodestones/Kromoss
   - meta-llama/Llama-3.1-8B-Instruct
   - meta-llama/Meta-Llama-3-8B-Instruct
   - Qwen/Qwen-Image-2.1
   - ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF
-  - ornith-ai/Ornith-1.5-122B
   - divagr1925/Qwen3.5-4B-Qwenputer
+  - ornith-ai/Ornith-1.5-122B
   - ConwayResearch/Underdog-Saluki-27B-1.0
   - fastino/GLiDE
-  - prism-ml/Ternary-Bonsai-2-27B-gguf
   - moonshotai/Kimi-K3
+  - prism-ml/Ternary-Bonsai-2-27B-gguf
   - reflection/Beam-1.0-501B-A23B
   - nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-BF16
   - zai-org/GLM-5.3-Flash
   - gugujiji/novel-humanize-4b
-  - meta-models/Muse-Spark-Open-816B-A42B
   - nvidia/Qwen3.8-Flash-Next-FP4-Local
   - AtomicChat/Nanbeige4.3-33B-GGUF
+  - meta-models/Muse-Spark-Open-816B-A42B
   - baidu/Unlimited-OCR
   - agentionai/Qwen3.8-Flash-Next-Gyro-GGUF
-  - Cloudflare/clef
   - Qwen/Qwen-Image-2.1-Turbo
+  - Cloudflare/clef
   - kaitchup/Qwen3.8-27B-SLQ-GGUF
-  - sensenova/SenseNova-6.8-Code2Video
   - peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF-MTP
+  - sensenova/SenseNova-6.8-Code2Video
   - GrootTeam/Groot-19B-A3B-261023
   - krea/Krea-2-Raw
   - google/gemma-4-31B-it
   - unsloth/MiniMax-M3.1-Flash-GGUF
   - ukisai/Swift-1.5-Qwen3.8-27B-GSQ-RCO-GGUF
+  - Octen/Octen-WebGR-4B
+  - agentionai/Qwen3.8-Flash-Next-Gyro-Coder-GGUF
+  - black-forest-labs/FLUX.1-dev
   - DavidAU/Qwen3.8-27B-Turbo-Brilliance-50X-Reasoning-Instruct-NEO-MAX-MTP-GGUF
   - zai-org/GLM-5.3
-  - agentionai/Qwen3.8-Flash-Next-Gyro-Coder-GGUF
-  - Octen/Octen-WebGR-4B
   - briaai/Fibo-2.0-edit-turbo
   - krea/Krea-2-Turbo
   - Qwen/Qwen3.5-4B
-  - Qwen/Qwen3.5-9B
-  - black-forest-labs/FLUX.1-dev
   - black-forest-labs/FLUX.1-schnell
+  - Qwen/Qwen3.5-9B
   - MemTensor/MemT-1.0-Flash
+  - GroundingPI/GroundAnything-VLM
   - nvidia/Qwen3.8-Flash-Next-NVFP4
   - unsloth/Qwen3.8-Flash-Next-GGUF
   - abenzerps/Nanbeige4.3-33B-GSQ-RCO-GGUF
   - tencent/Hy-Memory-30B-A3B
   - bottlecapai/ThinkingCap-Qwen3.8-Flash-Next
-  - GroundingPI/GroundAnything-VLM
   - unsloth/DeepSeek-V4.1-Flash-1017-GGUF
   - KRAFTON/Raon-1-mini-preview-gguf
   - LiquidAI/LFM2.5-24B-A2B
@@ -103,31 +105,31 @@ models:
   - black-forest-labs/flux-3-image-klein-base
   - nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4
   - empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF
-  - meta-llama/Llama-3.2-3B-Instruct
   - Cloudflare/clef-flash
   - meta-models/Muse-Glimmer-30B
   - ornith-ai/Ornith-1.5-9B-GGUF
+  - meta-llama/Llama-3.2-3B-Instruct
   - Qwen/Qwen3.6-35B-A3B
   - InternScience/Sage-A1.5-Q4_K_M-GGUF
   - BAAI/AREX-2
-  - openai/gpt-oss-120b
   - unsloth/Qwen3.6-35B-A3B-GGUF
+  - openai/gpt-oss-120b
   - Aleph-Alpha/Kolibri-1
   - yuxinlu1/gemma-4-12B-agentic-fable5-composer2.5-v2-3.5x-tau2-GGUF
   - basecompute/Qwen3.8-27B-BaseQuant-V1
-  - meta-llama/Llama-3.1-8B
   - RecursiveSI/flint-nvfp4-gguf
-  - unsloth/Qwen-Image-2.1-GGUF
+  - meta-llama/Llama-3.1-8B
   - unsloth/Qwen3.5-9B-GGUF
   - nerkyor/Qwen3.8-27B-Coder390-EfficientThink-Opus5.5-GPT6Astra-Grok4.7-DSV4Pro-K3-SFT-RLOO-MTP-DFlash2
   - nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-BF16
   - google/gemma-4-E4B-it
   - Apexintelligence-AI/Apex-35B-V1.0
+  - unsloth/Qwen-Image-2.1-GGUF
   - bottlecapai/ThinkingCap-gemma-4-26B-A4B-it
-  - google/medgemma-1.5-4b-it
   - LiquidAI/d1-3B
-  - meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   - peasantsmith/DeepSeek-V4.1-Flash-1017-Maya-GGUF
+  - google/medgemma-1.5-4b-it
+  - meta-models/Muse-Spark-Open-816B-A42B-NVFP4
   - XiaomiMiMo/MiMo-V2.6-Pro-RL
   - black-forest-labs/FLUX.2-dev
   - black-forest-labs/FLUX.2-klein-9B
@@ -143,39 +145,39 @@ models:
   - JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF
   - nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB
   - unsloth/Ornith-1.5-122B-GGUF
-  - prism-ml/Ternary-Bonsai-2-9B-gguf
-  - ornith-ai/Ornith-1.5-35B-A3B-GGUF
   - peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP
   - bartowski/Nanbeige_Nanbeige4.3-33B-GGUF
+  - openbmb/MiniCPM-V-4.7-35B-A3B-gguf
+  - ornith-ai/Ornith-1.5-35B-A3B-GGUF
   - unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF
+  - peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF
+  - prism-ml/Ternary-Bonsai-2-9B-gguf
   - google/gemma-4-26B-A4B-it
   - unsloth/Qwen3.5-4B-GGUF
-  - akhaliq/MOSS-Image-SFT-4-steps
-  - peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF
   - ukisai/Swift-1.5-Qwen3.8-27b
   - Viggle/Qwen-Image-2.1-viggle-turbo
+  - GrootTeam/Groot-19B-A3B-261023-GGUF
+  - peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF
+  - akhaliq/MOSS-Image-SFT-4-steps
   - openai/gpt-oss-20b
   - Lightricks/LTX-Video
   - google/gemma-4-12B-it-qat-q4_0-gguf
-  - GrootTeam/Groot-19B-A3B-261023-GGUF
   - Nanbeige/Nanbeige4.2-3B
   - nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB-GGUF
-  - peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF
   - Qwen/Qwen2.5-Coder-7B-Instruct-GGUF
-  - Qwen/Qwen3-8B-GGUF
   - Qwen/Qwen3.8-2.4T-A95B
-  - SeerRay-Lab/Xiaomi-Lens-0
   - unsloth/GLM-5.3-Flash-GGUF
+  - Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata
+  - Qwen/Qwen3-8B-GGUF
   - ornith-ai/Ornith-1.5-35B-A3B
   - Tongyi-MAI/Z-Image-Turbo
   - google/gemma-4-12B-it
   - deepseek-ai/DeepSeek-R1
   - HuggingFaceBio/Carbon-X-GGUF
   - ibm-granite/granite-switch-4.1-8b
-  - kaitchup/Qwen3.8-27B-SLQ-EAR98
-  - Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata
   - stabilityai/stable-diffusion-3.5-medium
   - XHToken/Spark-X2.6-4B-Base
+  - kaitchup/Qwen3.8-27B-SLQ-EAR98
   - stabilityai/stable-diffusion-xl-base-1.0
   - Qwen/Qwen3-4B-Instruct-2507
   - empero-ai/Qwythos-9B-Claude-Mythos-5-1M
@@ -187,36 +189,36 @@ models:
   - ornith-ai/Ornith-1.5-9B
   - RavichandranJ/Dolphin3-Cyber-8B-GGUF
   - Teriminal-RSI/Terminal-RSI-27B
+  - ibm-granite/granite-switch-4.1-30b
   - unsloth/LFM2.5-24B-A2B-GGUF
   - unsloth/MOSS-Image-SFT-GGUF
   - nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16
-  - ibm-granite/granite-switch-4.1-30b
+  - ornith-ai/Ornith-1.5-122B-GGUF
+  - google/gemma-4-E2B-it
   - meta-llama/Llama-2-7b-chat-hf
   - nvidia/Qwen3.8-27B-NVFP4
-  - ornith-ai/Ornith-1.5-122B-GGUF
   - meta-llama/Llama-3.2-3B
   - Qwen/Qwen3-8B
   - Qwen/Qwen2.5-7B-Instruct
-  - google/gemma-4-E2B-it
   - google/gemma-4-E4B
   - incoai/Qwen3.8-27B-DFlash2
   - Lightricks/LTX-2.5-Diffusers
+  - HemmingwayAI/Hemmingway-1.5
+  - black-forest-labs/FLUX.2-klein-4B
   - Qwen/Qwen3-14B
   - deepseek-ai/DeepSeek-V4-Pro
   - DogukanUrker/Nanbeige4.3-33B-GGUF
   - google/gemma-4-12B
-  - HemmingwayAI/Hemmingway-1.5
-  - inclusionAI/Ling-3.1-flash
   - LiquidAI/LFM2.5-24B-A2B-GGUF
   - poolside/Laguna-S-2.1
+  - Qwen/Qwen2.5-Coder-3B-Instruct-GGUF
   - abenzerps/Nemotron-3.5-Bolt-E4B-GSQ-RCO-GGUF
   - axiomofmind/Moss-Image-SFT-GGUF
-  - black-forest-labs/FLUX.2-klein-4B
   - diffbot/DeepSeek-V4.1-Flash-EXL3-3bpw-2x-RTX-PRO-6000
   - higa2515/gemma-4-12B-gay
-  - kaitchup/Qwen3.8-27B-SLQ-EAR99
   - LibertAIDAI/DeepSeek-V4.1-Flash-1017-EXL3-2.9bpw
   - NousResearch/Hermes-3-Llama-3.1-8B
+  - ornith-ai/Ornith-1.5-122B-NVFP4
 ---
 
 # VRAM & GPU Cost Calculator
