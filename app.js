@@ -424,9 +424,13 @@
   });
   el.input.addEventListener("blur", function () { setTimeout(closeSuggestions, 120); });
 
-  el.picks.innerHTML = PICKS.filter(function (id) { return BY_ID.has(id.toLowerCase()); }).map(function (id) {
-    return '<button type="button" class="chip" data-id="' + esc(id) + '">' + esc(id.split("/").pop()) + "</button>";
-  }).join("");
+  // The picks are the day's trending models on the Hub (the same models whose pages link this Space), so a visitor
+  // who came from one of those pages usually finds it here in one click. window.FASTGPU_PICKS_LABEL names them.
+  const shownPicks = PICKS.filter(function (id) { return BY_ID.has(id.toLowerCase()); });
+  el.picks.innerHTML = (shownPicks.length && window.FASTGPU_PICKS_LABEL ? '<span class="picks-label">' + esc(window.FASTGPU_PICKS_LABEL) + "</span>" : "") +
+    shownPicks.map(function (id) {
+      return '<button type="button" class="chip" data-id="' + esc(id) + '">' + esc(id.split("/").pop()) + "</button>";
+    }).join("");
   el.picks.addEventListener("click", function (e) {
     const b = e.target.closest("button[data-id]");
     if (!b) return;
