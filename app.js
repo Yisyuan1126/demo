@@ -671,7 +671,7 @@
       "Best match orders by FastGPU's score, led by price and weighing reliability and availability. Providers marked ★ pay FastGPU a referral fee when you rent from them through FastGPU; that never changes their order here. " +
       "Some providers bill CPU, RAM or disk on top of the GPU rate; the GPU page says which.</p>" +
       '<p class="cta"><a class="button" href="' + link(SITE + "/") + '" target="_blank" rel="noopener">Compare every GPU on FastGPU</a>' +
-      '<a href="' + link(SITE + "/gpus") + '" target="_blank" rel="noopener">All live GPU prices</a></p>' +
+      '<a href="' + link(SITE + "/providers") + '" target="_blank" rel="noopener">Compare GPU clouds</a></p>' +
       '<p class="fineprint thanks">Saved you a search? A like on <a href="' + SPACE_PAGE + '" target="_blank" rel="noopener">this Space</a> helps other people on the Hub find it.</p>';
 
     el.out.innerHTML = head + needHtml + table + foot;
