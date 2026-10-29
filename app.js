@@ -670,6 +670,7 @@
     let rows = (res.matches || []).slice();
     if (state.sort === "price") rows.sort(function (a, b) { return a.effective_usd_hr - b.effective_usd_hr; });
     const cheapest = rows.reduce(function (min, r) { return Math.min(min, r.effective_usd_hr); }, Infinity);
+    const alertRow = rows.find(function (r) { return r.effective_usd_hr === cheapest; }) || null;
     const mem = state.gpuMemory || {};
 
     let table;
@@ -707,6 +708,8 @@
       "Best match orders by FastGPU's score, led by price and weighing reliability and availability. Providers marked ★ pay FastGPU a referral fee when you rent from them through FastGPU; that never changes their order here. " +
       "Some providers bill CPU, RAM or disk on top of the GPU rate; the GPU page says which.</p>" +
       '<p class="cta"><a class="button" href="' + link(SITE + "/") + '" target="_blank" rel="noopener">Compare every GPU on FastGPU</a>' +
+      // A price-drop alert for the cheapest setup's GPU, on its FastGPU page (an email when it gets cheaper).
+      (alertRow && alertRow.page_url ? '<a href="' + link(alertRow.page_url.split("#")[0] + "#price-alert") + '" target="_blank" rel="noopener">Email me when the ' + esc(alertRow.gpu) + " gets cheaper</a>" : "") +
       '<a href="' + link(SITE + "/providers") + '" target="_blank" rel="noopener">Compare GPU clouds</a></p>' +
       '<p class="fineprint thanks">Saved you a search? A like on <a href="' + SPACE_PAGE + '" target="_blank" rel="noopener">this Space</a> helps other people on the Hub find it.</p>';
 
