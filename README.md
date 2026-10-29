@@ -55,8 +55,8 @@ models:
   - Qwen/Qwen-Image-2.1
   - ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-Coder-GGUF
   - ornith-ai/Ornith-1.5-122B
-  - ConwayResearch/Underdog-Saluki-27B-1.0
   - divagr1925/Qwen3.5-4B-Qwenputer
+  - ConwayResearch/Underdog-Saluki-27B-1.0
   - fastino/GLiDE
   - prism-ml/Ternary-Bonsai-2-27B-gguf
   - moonshotai/Kimi-K3
@@ -142,8 +142,8 @@ models:
   - destined/hurston-1
   - JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF
   - nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB
-  - prism-ml/Ternary-Bonsai-2-9B-gguf
   - unsloth/Ornith-1.5-122B-GGUF
+  - prism-ml/Ternary-Bonsai-2-9B-gguf
   - ornith-ai/Ornith-1.5-35B-A3B-GGUF
   - peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP
   - bartowski/Nanbeige_Nanbeige4.3-33B-GGUF
@@ -194,13 +194,13 @@ models:
   - meta-llama/Llama-2-7b-chat-hf
   - nvidia/Qwen3.8-27B-NVFP4
   - ornith-ai/Ornith-1.5-122B-GGUF
+  - meta-llama/Llama-3.2-3B
   - Qwen/Qwen3-8B
   - Qwen/Qwen2.5-7B-Instruct
   - google/gemma-4-E2B-it
   - google/gemma-4-E4B
   - incoai/Qwen3.8-27B-DFlash2
   - Lightricks/LTX-2.5-Diffusers
-  - meta-llama/Llama-3.2-3B
   - Qwen/Qwen3-14B
   - deepseek-ai/DeepSeek-V4-Pro
   - DogukanUrker/Nanbeige4.3-33B-GGUF
