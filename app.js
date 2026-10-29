@@ -627,7 +627,8 @@
       ? '<div class="need"><p class="need-num"><span class="mono">~' + esc(Math.round(need).toLocaleString("en-US")) + "</span> GB</p>" +
         '<p class="need-what">' + esc(needSentence(task, precText, build)) + "</p>" +
         '<p class="fineprint">' + esc(derivation(task, paramsB, precision, need, build)) +
-        ' <a href="' + link(SITE + "/methodology") + '" target="_blank" rel="noopener">How FastGPU sizes and ranks</a></p></div>'
+        ' <a href="' + link(SITE + "/blog/llm-vram-guide") + '" target="_blank" rel="noopener">How much VRAM a model needs, worked through</a>' +
+        ' · <a href="' + link(SITE + "/methodology") + '" target="_blank" rel="noopener">How FastGPU sizes and ranks</a></p></div>'
       : "";
 
     let rows = (res.matches || []).slice();
