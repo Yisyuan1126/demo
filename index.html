@@ -4,192 +4,194 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemma 多模態影像分析助手</title>
-   :root {
-        --bg-color: #fff5f8;
-        --card-bg: rgba(255, 255, 255, 0.9);
-        --border-glow: #ffb6c1;
-        --neon-cyan: #ff69b4;
-        --neon-purple: #ba55d3;
-        --text-main: #4a4046;
-        --text-muted: #8c7b82;
-    }
+    <style>
+        :root {
+            --bg-color: #fff5f8;
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --border-glow: #ffb6c1;
+            --neon-cyan: #ff69b4;
+            --neon-purple: #ba55d3;
+            --text-main: #4a4046;
+            --text-muted: #8c7b82;
+        }
 
-    body {
-        font-family: "Comic Sans MS", "Chalkboard SE", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: 650px;
-        margin: 40px auto;
-        padding: 20px;
-        background-color: var(--bg-color);
-        background-image: 
-            radial-gradient(circle at 15% 15%, rgba(255, 182, 193, 0.4) 0%, transparent 35%),
-            radial-gradient(circle at 85% 85%, rgba(221, 160, 221, 0.4) 0%, transparent 35%);
-        color: var(--text-main);
-        min-height: 100vh;
-    }
+        body {
+            font-family: "Comic Sans MS", "Chalkboard SE", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 650px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(255, 182, 193, 0.4) 0%, transparent 35%),
+                radial-gradient(circle at 85% 85%, rgba(221, 160, 221, 0.4) 0%, transparent 35%);
+            color: var(--text-main);
+            min-height: 100vh;
+        }
 
-    .card {
-        background: var(--card-bg);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        padding: 35px;
-        border-radius: 28px;
-        border: 2px dashed #ffb6c1;
-        box-shadow: 0 10px 30px rgba(255, 182, 193, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.8);
-        position: relative;
-        overflow: hidden;
-    }
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 35px;
+            border-radius: 28px;
+            border: 2px dashed #ffb6c1;
+            box-shadow: 0 10px 30px rgba(255, 182, 193, 0.3), inset 0 0 15px rgba(255, 255, 255, 0.8);
+            position: relative;
+            overflow: hidden;
+        }
 
-    .card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 3px;
-        background: linear-gradient(90deg, transparent, #ff69b4, #ba55d3, transparent);
-        animation: scanline 4s linear infinite;
-    }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #ff69b4, #ba55d3, transparent);
+            animation: scanline 4s linear infinite;
+        }
 
-    @keyframes scanline {
-        0% { left: -100%; }
-        100% { left: 100%; }
-    }
+        @keyframes scanline {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
 
-    h2 {
-        margin-top: 0;
-        font-size: 1.8rem;
-        background: linear-gradient(135deg, #ff69b4, #ba55d3);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        letter-spacing: 0.5px;
-        text-align: center;
-    }
+        h2 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #ff69b4, #ba55d3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
 
-    p {
-        color: var(--text-muted);
-        font-size: 0.95rem;
-        margin-bottom: 24px;
-        text-align: center;
-    }
+        p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            text-align: center;
+        }
 
-    .form-group {
-        margin-bottom: 20px;
-    }
+        .form-group {
+            margin-bottom: 20px;
+        }
 
-    label {
-        display: block;
-        font-weight: 700;
-        margin-bottom: 8px;
-        font-size: 0.95rem;
-        color: #ff1493;
-        letter-spacing: 0.5px;
-    }
+        label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: #ff1493;
+            letter-spacing: 0.5px;
+        }
 
-    input[type="password"],
-    input[type="text"],
-    input[type="file"],
-    textarea {
-        width: 100%;
-        padding: 14px 16px;
-        background: rgba(255, 255, 255, 0.8);
-        border: 2px solid #ffc0cb;
-        border-radius: 16px;
-        box-sizing: border-box;
-        color: var(--text-main);
-        font-size: 0.95rem;
-        transition: all 0.3s ease;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-    }
+        input[type="password"],
+        input[type="text"],
+        input[type="file"],
+        textarea {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #ffc0cb;
+            border-radius: 16px;
+            box-sizing: border-box;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+        }
 
-    input:focus {
-        outline: none;
-        border-color: #ff69b4;
-        box-shadow: 0 0 12px rgba(255, 105, 180, 0.4);
-        background: #fff;
-    }
+        input:focus {
+            outline: none;
+            border-color: #ff69b4;
+            box-shadow: 0 0 12px rgba(255, 105, 180, 0.4);
+            background: #fff;
+        }
 
-    input[type="file"]::file-selector-button {
-        background: #ffe4e1;
-        color: #db7093;
-        border: 1px solid #ffb6c1;
-        padding: 8px 14px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-weight: bold;
-    }
+        input[type="file"]::file-selector-button {
+            background: #ffe4e1;
+            color: #db7093;
+            border: 1px solid #ffb6c1;
+            padding: 8px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
 
-    input[type="file"]::file-selector-button:hover {
-        background: #ff69b4;
-        color: #fff;
-    }
+        input[type="file"]::file-selector-button:hover {
+            background: #ff69b4;
+            color: #fff;
+        }
 
-    button {
-        background: linear-gradient(135deg, #ff69b4, #dda0dd);
-        color: #fff;
-        border: none;
-        padding: 14px 20px;
-        font-weight: 700;
-        border-radius: 16px;
-        cursor: pointer;
-        width: 100%;
-        font-size: 1.05rem;
-        letter-spacing: 1px;
-        transition: all 0.3s ease;
-        box-shadow: 0 6px 20px rgba(255, 105, 180, 0.4);
-    }
+        button {
+            background: linear-gradient(135deg, #ff69b4, #dda0dd);
+            color: #fff;
+            border: none;
+            padding: 14px 20px;
+            font-weight: 700;
+            border-radius: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1.05rem;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(255, 105, 180, 0.4);
+        }
 
-    button:hover {
-        opacity: 0.95;
-        transform: translateY(-2px) scale(1.01);
-        box-shadow: 0 8px 25px rgba(186, 85, 211, 0.5);
-    }
+        button:hover {
+            opacity: 0.95;
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: 0 8px 25px rgba(186, 85, 211, 0.5);
+        }
 
-    button:disabled {
-        background: #e0e0e0;
-        color: #a0a0a0;
-        cursor: not-allowed;
-        box-shadow: none;
-        transform: none;
-    }
+        button:disabled {
+            background: #e0e0e0;
+            color: #a0a0a0;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
 
-    #preview-container {
-        margin-top: 12px;
-        text-align: center;
-    }
+        #preview-container {
+            margin-top: 12px;
+            text-align: center;
+        }
 
-    #imagePreview {
-        max-width: 100%;
-        max-height: 250px;
-        border-radius: 16px;
-        display: none;
-        border: 2px solid #ffb6c1;
-        box-shadow: 0 4px 12px rgba(255, 182, 193, 0.5);
-    }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 16px;
+            display: none;
+            border: 2px solid #ffb6c1;
+            box-shadow: 0 4px 12px rgba(255, 182, 193, 0.5);
+        }
 
-    #result {
-        margin-top: 12px;
-        padding: 18px;
-        background: rgba(255, 250, 250, 0.9);
-        border: 2px dashed #ffb6c1;
-        border-radius: 16px;
-        white-space: pre-wrap;
-        min-height: 60px;
-        font-size: 0.95rem;
-        color: #55444e;
-        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.03);
-    }
+        #result {
+            margin-top: 12px;
+            padding: 18px;
+            background: rgba(255, 250, 250, 0.9);
+            border: 2px dashed #ffb6c1;
+            border-radius: 16px;
+            white-space: pre-wrap;
+            min-height: 60px;
+            font-size: 0.95rem;
+            color: #55444e;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.03);
+        }
+    </style>
 </head>
 <body>
     <div class="card">
         <h2>Gemma 多模態影像分析助手</h2>
         <p>透過 Hugging Face Router 呼叫 gemma-4-31B-it 模型進行高精度影像辨識與分析。</p>
-        
+
         <div class="form-group">
             <label for="apiKey">Hugging Face Token (HF_TOKEN)</label>
             <input type="password" id="apiKey" placeholder="請輸入您的 HF_TOKEN">
         </div>
-        
+
         <div class="form-group">
             <label for="imageInput">上傳圖片</label>
             <input type="file" id="imageInput" accept="image/*" onchange="previewSelectedImage(event)">
@@ -197,14 +199,14 @@
                 <img id="imagePreview" alt="圖片預覽">
             </div>
         </div>
-        
+
         <div class="form-group">
             <label for="promptInput">輸入提示詞 (Prompt)</label>
             <input type="text" id="promptInput" value="Describe this image in one sentence in chinese">
         </div>
-        
+
         <button id="submitBtn" onclick="analyzeImage()">啟動分析</button>
-        
+
         <div class="form-group" style="margin-top: 24px;">
             <label>模型回應</label>
             <div id="result">系統待命，尚未開始分析...</div>
@@ -218,7 +220,7 @@
             const preview = document.getElementById('imagePreview');
             if (file) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = function (e) {
                     preview.src = e.target.result;
                     preview.style.display = 'inline-block';
                 }
@@ -233,9 +235,9 @@
         function compressImage(file, maxSize = 1024, quality = 0.85) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = function (e) {
                     const img = new Image();
-                    img.onload = function() {
+                    img.onload = function () {
                         let width = img.width;
                         let height = img.height;
                         if (width > height) {
